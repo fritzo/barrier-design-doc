@@ -1,5 +1,8 @@
-*.cut
 *.aux
+*.bbl
+*.bib
+*.blg
+*.cut
 *.dvi
 *.log
 *.out
