@@ -1,0 +1,8 @@
+*.cut
+*.aux
+*.dvi
+*.log
+*.out
+*.xcp
+
+*.pdf
