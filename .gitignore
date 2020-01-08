@@ -9,3 +9,4 @@
 *.xcp
 
 *.pdf
+!main.pdf
