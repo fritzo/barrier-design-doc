@@ -78,14 +78,71 @@ Funsors \cite{obermeyer2019functional} are a software abstraction generalizing T
 
 \section{Delayed Sampling with Funsors}
 
-Consider an embedded probabilistic programming language with two primitive statements and two effect handlers:
+Consider an embedded probabilistic programming language, extending a host language with two primitive statements and two effect handlers:
 \begin{itemize}
   \item The statement \verb$x = sample(name,dist)$ is a named stochastic statement, where \verb$x$ is a Funsor value, \verb$name$ is a unique identifier for the statement, and \verb$dist$ is a Funsor distribution.
   \item The statement \verb$x = barrier(x)$ eliminates any free variables from the recursive data structure \verb$x$, which may contain Funsor values.
-  \item The effect handler \verb$condition(name, data)$ conditions a model to observed \verb$data$ and affects only the single \verb$sample$ statement with matching \verb$name$.
+  \item The effect handler \verb$condition({name:data})$ conditions a model to observed \verb$data$ and affects only the single \verb$sample$ statement with matching \verb$name$.
   \item The effect handler \verb$log_joint()$ records a representation of the cumulative log joint density of a model as a Funsor expression.
 \end{itemize}
-We assume this probabilistic programming language is embedded in a host language; we use Python for the host language in this paper.
+We use Python for the host language in this paper.
+
+Consider a model of stochastic control system with piecewise control, attempting to keep a latent state \verb$z$ within the interval $[-10,10]$
+\begin{verbatim}
+ 1  def model():
+ 2      z = sample("z_init",Normal(0,1))  # latent state
+ 3      k = 0                             # control
+ 4      cost = 0                          # cumulative cost of controller
+ 5      for t in range(1000):
+ 6          if z > 10:                    # control flow depends on z
+ 7              k -= 1
+ 8          elif z < -10:
+ 9              k += 1
+10          else:
+11              k = 0
+12          cost += abs(k)
+13          z = sample(f"z_{t}",Normal(z+k,1))
+14          x = sample(f"x_{t}",Normal(z,1))
+15      return cost
+\end{verbatim}
+Now suppose we want to estimate the total controller cost given a sequence of observations \verb$x$.
+One approach to inference is to apply Sequential Monte Carlo (SMC) filtering.
+To maintain a vectorized population of particles we can rewrite the model using a vectorized conditional (e.g. \verb$where(cond,if_true,if_false)$ as implemented in NumPy and PyTorch).
+Further we can support resampling of particle populations by adding a \verb$barrier$ statement; this is needed to communicate resampling decisions with the model's local state.
+\begin{verbatim}
+ 1  def model():
+ 2      z = sample("z_init",Normal(0,1))    # latent state
+ 3      k = 0 * z                           # control
+ 4      cost = 0 * z                        # cumulative cost of controller
+ 5      for t in range(1000):
+ 6          z,k,cost = barrier((z,k,cost))
+ 7          k = where(z > 10, k + 1, k)
+ 8          k = where(z < 10, k + 1, k)
+ 9          k = where(-10 <= z & z <= 10, 0 * k, k)
+10          z = sample(f"z_{t}",Normal(z+k,1))
+11          x = sample(f"x_{t}",Normal(z,1))
+12      return cost
+\end{verbatim}
+See appendix \label{sec:appendix:smc} for details of the effect handlers \verb$condition$ and \verb$log_joint$ to implement SMC inference.
+
+Notice that if there were no control \verb$k$ (or indeed if the control were linear), we could completely Rao-Blackwellize using a Kalman filter: inference via variable elimination would be exact.
+To implement linear-time exact inference, we require only:
+\begin{itemize}
+  \item lazy versions of tensor operations such as $where$;
+  \item a lazy interpretation for \verb$sample$ statements;
+  \item a variable-eliminating interpretation of \verb$barrier$ statements; and
+  \item a variable-eliminating computation of the final \verb$log_joint$ latent state.
+\end{itemize}
+See appendix \label{sec:appendix:exact} for details of the effect handlers \verb$condition$ and \verb$log_joint$ to implement SMC inference.
+This is the approach taken by Pyro's discrete enumeration inference, which leverages broadcasting in the host tensor DSL to implement lazy sampling and lazy tensor ops.
+
+To partially Rao-Blackwellize our SMC inference, we can combine the two approaches, emitting lazily sampled values from \verb$sample$ statements and eagerly sampling delayed samples at \verb$barrier$ statements.
+In contrast to the variable-elimination interpretation of \verb$barrier$, this interpretation guarantees all local state is ground and hence can be inspected by conditionals.
+See appendix \label{sec:appendix:delayed} for details of effect handlers \verb$condition$ and \verb$log_joint$ to implement delayed sampling.
+
+\section{Conclusion}
+
+We demonstrated flexible inference algorithms in an embedded probabilistic programming language with a new \verb$barrier$ statement and support for lazy computations represented as Funsors.
 
 % See Lawrence's paper for examples including
 % * linear+nonlinear Gaussian state space model and
@@ -95,6 +152,16 @@ We assume this probabilistic programming language is embedded in a host language
 \bibliographystyle{acm-reference-format}
 \bibliography{main}
 
-\appendix
+\section{Effect handlers for inference via Sequential Monte Carlo}
+\label{sec:appendix:smc}
+TODO
+
+\section{Effect handlers for exact inference via Variable Elimination}
+\label{sec:appendix:exact}
+TODO
+
+\section{Effect handlers for inference via Delayed Sampling}
+\label{sec:appendix:delayed}
+TODO
 
 \end{document}
