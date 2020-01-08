@@ -47,17 +47,30 @@
 \begin{abstract}
 Delayed sampling is an inference technique for automatic Rao-Blackwellization in sequential latent variable models.
 Funsors are a software abstraction generalizing Tensors and Distributions and supporting seminumerical computation including analytic integration.
-We demonstrate how to easily implement delayed sampling in a Funsor-based probabilistic programming langugae using effect handlers for \texttt{sample} statements and a \texttt{barrier} statement.
+We demonstrate how to easily implement delayed sampling in a Funsor-based probabilistic programming language using effect handlers for \texttt{sample} statements and a \texttt{barrier} statement.
 \end{abstract}
 
 \maketitle
 
 \section{Introduction}
 
+Let us distinguish two types of inference strategies in probabilistic programming, call them \emph{lazy} and \emph{eager}.
+Let us say a strategy is lazy if it it first symbolically evaluates or compiles model code, then globally analyzes the code to create an inference update strategy.
+By contrast consider a strategy eager if it eagerly executes model code, drawing samples from each latent variable.
+For example the autograd-based inference algorithms in Pyro \cite{bingham2018pyro} are eager in the sense that samples are eagerly created at each sample site.
+
+However it is often advantageous to combine lazy and eager strategies, performing local exact computations within small parts of a probabilistic model, but drawing samples to communicate between those parts.
+Examples include Rao-Blackwellized SMC filters and their generalization as implemented in Birch \cite{murray2017delayed}, and reactive probabilistic programming \cite{baudart2019reactive}.
+
+This work addresses the challenge of implementing boundedly-lazy inference in a Pyro-like language where samples are eagerly drawn and control flow may depend on those sample values.
+Our approach is to use Funsors, a software abstraction generalizing Tensors, Distributions, and lazy compute graphs.
+The core idea is to allow lazy sample statements during program execution, and to trigger sampling of lazy random variables only at user-specified \verb$barrier$ statements, typically before control flow.
+We implement our approach using two effect handlers \cite{moore2018effect,pretnar2015introduction}.
+
 \section{Delayed Sampling}
 
 Delayed sampling \cite{murray2017delayed} is an inference technique for automatic Rao-Blackwellization in sequential latent variable models.
-Delayes sampling was introduced in the Birch probabilistic programming language \cite{murray2018automated}.
+Delayed sampling was introduced in the Birch probabilistic programming language \cite{murray2018automated}.
 
 \section{Funsors}
 
@@ -65,14 +78,19 @@ Funsors \cite{obermeyer2019functional} are a software abstraction generalizing T
 
 \section{Delayed Sampling with Funsors}
 
-Consider a probabilistic programming language with two statements and two effect handlers:
+Consider an embedded probabilistic programming language with two primitive statements and two effect handlers:
 \begin{itemize}
   \item The statement \verb$x = sample(name,dist)$ is a named stochastic statement, where \verb$x$ is a Funsor value, \verb$name$ is a unique identifier for the statement, and \verb$dist$ is a Funsor distribution.
-  \item The statement \verb$x = barrier(x)$ elimiates any free variables from the recursive data structure \verb$x$, which may contain Funsor values.
-  \item The effect handler \verb$condition(name, data)$ conditions a model to observed \verb$data$ andd affects only the single \verb$sample$ statement with matching \verb$name$.
+  \item The statement \verb$x = barrier(x)$ eliminates any free variables from the recursive data structure \verb$x$, which may contain Funsor values.
+  \item The effect handler \verb$condition(name, data)$ conditions a model to observed \verb$data$ and affects only the single \verb$sample$ statement with matching \verb$name$.
   \item The effect handler \verb$log_joint()$ records a representation of the cumulative log joint density of a model as a Funsor expression.
 \end{itemize}
-We assume this probabilistic programming language is embedded in a host language, and use Python for the host langugage in this paper.
+We assume this probabilistic programming language is embedded in a host language; we use Python for the host language in this paper.
+
+% See Lawrence's paper for examples including
+% * linear+nonlinear Gaussian state space model and
+% * Beta-Binomial-Poisson vector-borne disease model
+% https://arxiv.org/pdf/1708.07787.pdf
 
 \bibliographystyle{acm-reference-format}
 \bibliography{main}
