@@ -78,14 +78,22 @@ Funsors \cite{obermeyer2019functional} are a software abstraction generalizing T
 
 \section{Delayed Sampling with Funsors}
 
-Consider an embedded probabilistic programming language, extending a host language with two primitive statements and two effect handlers:
+Consider an embedded probabilistic programming language, extending a host language with two primitive statements.
 \begin{itemize}
   \item The statement \verb$x = sample(name,dist)$ is a named stochastic statement, where \verb$x$ is a Funsor value, \verb$name$ is a unique identifier for the statement, and \verb$dist$ is a Funsor distribution.
   \item The statement \verb$x = barrier(x)$ eliminates any free variables from the recursive data structure \verb$x$, which may contain Funsor values.
-  \item The effect handler \verb$condition({name:data})$ conditions a model to observed \verb$data$ and affects only the single \verb$sample$ statement with matching \verb$name$.
-  \item The effect handler \verb$log_joint()$ records a representation of the cumulative log joint density of a model as a Funsor expression.
 \end{itemize}
 We use Python for the host language in this paper.
+
+We will implement each inference algorithm as an effect handler.
+Each inference algorithm will input observed data, allow running of model code, and can then interpret nonstandard model outputs as posterior probability distributions, e.g.
+\begin{verbatim}
+with MyInferenceAlgorithm(data=observations) as inference:
+    output = model()
+
+posterior = inference.get_posterior(output)
+\end{verbatim}
+where \verb$observations$ is a dictionary mapping sample statement name to observed value, and the resulting \verb$posterior$ is some representation of the posterior distribution over latent variables.
 
 Consider a model of stochastic control system with piecewise control, attempting to keep a latent state \verb$z$ within the interval $[-10,10]$
 \begin{verbatim}
@@ -143,6 +151,7 @@ See appendix \label{sec:appendix:delayed} for details of effect handlers \verb$c
 \section{Conclusion}
 
 We demonstrated flexible inference algorithms in an embedded probabilistic programming language with a new \verb$barrier$ statement and support for lazy computations represented as Funsors.
+While Funsor implementations are few, this same technique can be used for delayed sampling of discrete latent variables using only a Tensor library.
 
 % See Lawrence's paper for examples including
 % * linear+nonlinear Gaussian state space model and
@@ -156,16 +165,6 @@ We demonstrated flexible inference algorithms in an embedded probabilistic progr
 
 \subsection{Effect handling framework}
 Before describing effect implementations, we provide a simple framework for effect handling embedded in Python.
-Our aim is to write each inference algorithm as an effect handler, then use the inference algorithm as
-
-\begin{verbatim}
-with MyInferenceAlgorithm(data=observations) as inference:
-    cost = model()
-
-posterior = inference.get_posterior(cost)
-\end{verbatim}
-where \verb$observations$ is a dictionary mapping sample statement name to observed value, and the resulting \verb$posterior$ is some representation of the posterior distribution over latent variables.
-
 Let's start with a standard interpretation, also implemented as an effect handler.
 \begin{verbatim}
 class StandardHandler:
@@ -193,7 +192,7 @@ def sample(name, dist):
 def barrier(state):
     return HANDLER.barrier(state)
 \end{verbatim}
-Note that the global \verb$sample$ and \verb$\barrier$ statements are late binding.
+Note that the global \verb$sample$ and \verb$barrier$ statements are late binding.
 
 \subsection{Effect handlers for inference via Sequential Monte Carlo}
 \label{sec:appendix:smc}
