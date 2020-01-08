@@ -13,7 +13,7 @@
 
 \begin{document}
 
-\title{Delayed Sampling with Funsors}
+\title{Delayed Sampling via Funsors and Barriers}
 %  \titlenote{This is a titlenote}
 %  \subtitle{This is a subtitle}
 %  \subtitlenote{Subtitle note}
@@ -152,16 +152,110 @@ We demonstrated flexible inference algorithms in an embedded probabilistic progr
 \bibliographystyle{acm-reference-format}
 \bibliography{main}
 
-\section{Effect handlers for inference via Sequential Monte Carlo}
+\section{Appendix: Details of effect handling}
+
+\subsection{Effect handling framework}
+Before describing effect implementations, we provide a simple framework for effect handling embedded in Python.
+Our aim is to write each inference algorithm as an effect handler, then use the inference algorithm as
+
+\begin{verbatim}
+with MyInferenceAlgorithm(data=observations) as inference:
+    cost = model()
+
+posterior = inference.get_posterior(cost)
+\end{verbatim}
+where \verb$observations$ is a dictionary mapping sample statement name to observed value, and the resulting \verb$posterior$ is some representation of the posterior distribution over latent variables.
+
+Let's start with a standard interpretation, also implemented as an effect handler.
+\begin{verbatim}
+class StandardHandler:
+    def __enter__(self):
+        global HANDLER
+        self.old_handler = HANDLER
+        HANDLER = self
+        return self
+
+    def __exit__(self, type, value, traceback):
+        global HANDLER
+        HANDLER = self.old_handler
+
+    def sample(self, name, dist):
+        return dist.sample()
+
+    def barrier(self, state):
+        return state
+
+HANDLER = StandardHandler()
+
+def sample(name, dist):
+    return HANDLER.sample(name, dist)
+
+def barrier(state):
+    return HANDLER.barrier(state)
+\end{verbatim}
+Note that the global \verb$sample$ and \verb$\barrier$ statements are late binding.
+
+\subsection{Effect handlers for inference via Sequential Monte Carlo}
 \label{sec:appendix:smc}
-TODO
+We can now implement Sequential Monte Carlo inference by maintaining a vector \verb$log_joint$ of particle log weights, multiply sampling at \verb$sample$ statements, and resampling at \verb$barrier$ statements.
+\begin{verbatim}
+class SMC(StandardHandler):
+    def __init__(self, data, num_particles=100):
+        self.data = data
+        self.log_joint = zeros(num_particles)
+        self.num_particles = num_particles
 
-\section{Effect handlers for exact inference via Variable Elimination}
+    def sample(self, name, dist):
+        if name in self.data:
+            value = self.data[name]
+        else:
+            value = dist.sample(sample_shape=self.log_joint.shape)
+        self.log_joint += dist.log_prob(self.data[name])
+        return value
+
+    def barrier(self, state):
+        index = Categorical(logits=self.log_joint).sample()
+        self.log_joint[:] = 0
+        return [x[index] for x in state]
+
+    def get_posterior(self, value):
+        probs = exp(self.log_joint)
+        probs /= probs.sum()
+        return {"samples": value, "probs": probs}
+\end{verbatim}
+
+\subsection{Effect handlers for exact inference via Variable Elimination}
+We can implement variable elimination by leveraging lazy compute graphs and exact forward-backward computation of the Funsor library.
 \label{sec:appendix:exact}
-TODO
+\begin{verbatim}
+class VariableElimination(StandardHandler):
+    def __init__(self, data, num_particles=100):
+        self.data = data
+        self.log_joint = funsor.Number(0)
+        self.num_particles = num_particles
 
-\section{Effect handlers for inference via Delayed Sampling}
+    def sample(self, name, dist):
+        if name in self.data:
+            value = self.data[name]
+        else:
+            value = funsor.Variable(name)  # create a delayed sample
+        self.log_joint += dist.log_prob(self.data[name])
+        return value
+
+    def get_posterior(self, value):
+        subs = self.log_joint.sample(self.num_particles)
+        return value(**subs)
+\end{verbatim}
+
+\subsection{Effect handlers for inference via Delayed Sampling}
+We can now implement delayed sampling by extending the \verb$VariableElimination$ handler to eagerly eliminate variables whenever a barrier statement is encountered.
 \label{sec:appendix:delayed}
-TODO
+\begin{verbatim}
+class DelayedSampling(VariableElimination):
+    def barrier(self, state):
+        subs = self.log_joint.sample(state.inputs, self.num_samples)
+        self.log_joint = self.log_joint(**subs)
+        return [x(**subs) for x in state]
+\end{verbatim}
 
 \end{document}
