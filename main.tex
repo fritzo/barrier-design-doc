@@ -55,7 +55,7 @@ We demonstrate how to easily implement delayed sampling in an embedded probabili
 
 \section{Introduction}
 
-Recently intrest has grown in techniques to implement light-weight probabilistic programming langauges (PPLs) as embedded domain specific languages (DSLs) in other popular langauges used in industry, e.g. Figaro \cite{pfeffer2009figaro} and Ranier \cite{bryant2018ranier} in Scala, Edward \cite{tran2017deep} in Python+Tensorflow, Pyro \cite{bingham2018pyro} in Python+PyTorch, Infergo \cite{tolpin2019deployable} in Go, and the PPX protocol \cite{baydin2019efficient} for integrating Python+PyTorch+SHERPA.
+Recently interest has grown in techniques to implement light-weight probabilistic programming languages (PPLs) as embedded domain specific languages (DSLs) in other popular languages used in industry, e.g. Figaro \cite{pfeffer2009figaro} and Ranier \cite{bryant2018ranier} in Scala, Edward \cite{tran2017deep} in Python+Tensorflow, Pyro \cite{bingham2018pyro} in Python+PyTorch, Infergo \cite{tolpin2019deployable} in Go, and the PPX protocol \cite{baydin2019efficient} for integrating Python+PyTorch+SHERPA.
 Among approaches to lightweight embedded PPLs, effect handlers have shown promise \cite{moore2018effect,pretnar2015introduction}, allowing PPLs like Pyro and Edward2 \cite{tran2018simple} to apply program transformations without needing program analysis or even compilation.
 Here we show that delayed sampling can also be implemented in a light-weight embedded PPL using only a \verb$barrier$ statement and limited support from an underlying math library.
 
