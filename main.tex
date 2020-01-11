@@ -63,14 +63,14 @@ Here we show that delayed sampling can also be implemented in a light-weight emb
 
 Let us distinguish two types of inference strategies in probabilistic programming, call them \emph{lazy} and \emph{eager}.
 Let us say a strategy is \emph{lazy} if it it first symbolically evaluates or compiles model code, then globally analyzes the code to create an inference update strategy.
-Say a strategy \emph{eager} if it eagerly executes model code, drawing samples from each latent variable.
-For example the autograd-based inference algorithms in Pyro are eager in the sense that samples are eagerly created at each sample site.
+Say a strategy is \emph{eager} if it eagerly executes model code, drawing samples from each latent variable.
+For example the gradient-based Monte Carlo inference algorithms in Pyro are eager in the sense that samples are eagerly created at each sample site.
 
 It is often advantageous to combine lazy and eager strategies, performing local exact computations within small parts of a probabilistic model, but drawing samples to communicate between those parts.
 Examples include Rao-Blackwellized SMC filters and their generalization as implemented in Birch \cite{murray2017delayed}, and reactive probabilistic programming \cite{baudart2019reactive}.
 
 This work addresses the challenge of implementing boundedly-lazy inference in a lightweight embedded PPL where samples are eagerly drawn and control flow may depend on those sample values.
-Our approach is to use Funsors, a software abstraction generalizing Tensors, Distributions, and lazy compute graphs.
+Our approach is to use Funsors \cite{obermeyer2019functional}, a software abstraction generalizing Tensors, Distributions, and lazy compute graphs.
 The core idea is to allow lazy sample statements during program execution, and to trigger sampling of lazy random variables only at user-specified \verb$barrier$ statements, typically either immediately before control flow or immediately after a variable goes out of scope.
 
 \section{Embedded probabilistic programming languages with effects}
@@ -78,7 +78,7 @@ The core idea is to allow lazy sample statements during program execution, and t
 Consider an embedded probabilistic programming language, extending a host language by adding two primitive statements:
 \begin{itemize}
   \item The statement \verb$x = sample(name,dist)$ is a named stochastic statement, where \verb$x$ is a Tensor or Funsor value, \verb$name$ is a unique identifier for the statement, and \verb$dist$ is a distribution (possibly a Funsor).
-  \item The statement \verb$state = barrier(state)$ eliminates any free/delayed variables from the recursive observations structure \verb$state$, which may contain Tensor or Funsor values (we restrict attention to lists of Tensors/Funsors).
+  \item The statement \verb$state = barrier(state)$ eliminates any free/delayed variables from the recursive observations structure \verb$state$, which may contain Tensor or Funsor values (we will restrict attention to lists of Tensors/Funsors for ease of exposition).
 \end{itemize}
 We use Python for the host language in this paper.
 
@@ -114,7 +114,7 @@ Consider a model of a stochastic control system with piecewise control, attempti
 \end{Verbatim}
 Now suppose we want to estimate the total controller cost given a sequence of observations \verb$x$.
 One approach to inference is Sequential Monte Carlo (SMC) filtering.
-To maintain a vectorized population of particles we can rewrite the model using a vectorized conditional (e.g. \verb$where(cond,if_true,if_false)$ as implemented in NumPy and PyTorch).
+To maintain a vectorized population of particles we can rewrite the model using a vectorized conditional (e.g. \verb$where(cond,if_true,if_false)$\footnote{\url{https://docs.scipy.org/doc/numpy/reference/generated/numpy.where.html}} as implemented in NumPy, PyTorch and TensorFlow).
 Further we can support resampling of particle populations by adding a \verb$barrier$ statement to the model code; this is needed to communicate resampling decisions to the model's local state.
 \begin{Verbatim}[samepage=true]
  1  def model():
@@ -149,7 +149,7 @@ See appendix \ref{sec:appendix:delayed} for details of effect handler to impleme
 \section{Conclusion}
 
 We demonstrated flexible inference algorithms in an embedded probabilistic programming language with a new \verb$barrier$ statement and support for lazy computations represented as Funsors.
-While Funsor implementations are few, this same technique can be used for delayed sampling of discrete latent variables using only a Tensor library and a variable elimination engine such as \verb$opt_einsum$ \cite{smith2018opt_einsum}.
+While Funsor implementations are few, this same technique can be used for delayed sampling of discrete latent variables using only a Tensor library\footnote{See the examples in \url{http://pyro.ai/examples/enumeration.html}} and a variable elimination engine such as \verb$opt_einsum$ \cite{smith2018opt_einsum}.
 
 % See Lawrence's paper for examples including
 % * linear+nonlinear Gaussian state space model and
@@ -197,7 +197,7 @@ Next we can define user facing statements with late binding to the active effect
 
 \subsection{Effect handlers for inference via Sequential Monte Carlo}
 \label{sec:appendix:smc}
-We can now implement Sequential Monte Carlo inference by maintaining a vector \verb$log_joint$ of particle log weights, sampling independently each particle at \verb$sample$ statements, and resampling at \verb$barrier$ statements.
+We can now implement sequential importance resampling inference by maintaining a vector \verb$log_joint$ of particle log weights, sampling independently each particle at \verb$sample$ statements, and resampling at \verb$barrier$ statements.
 \begin{Verbatim}[samepage=true]
   class SMC(StandardHandler):
       def __init__(self, observations, num_particles=100):
@@ -245,7 +245,7 @@ This handler ignores barrier statements.
           return value
 
       def get_posterior(self, value):
-          return funsor.Expectation(log_joint, value)
+          return funsor.Expectation(self.log_joint, value)
 \end{Verbatim}
 
 \subsection{Effect handlers for inference via Delayed Sampling}
