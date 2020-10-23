@@ -241,7 +241,7 @@ This handler ignores barrier statements.
               value = self.observations[name]
           else:
               value = funsor.Variable(name)  # create a delayed sample
-          self.log_joint += dist.log_prob(self.observations[name])
+          self.log_joint += dist.log_prob(value)
           return value
 
       def get_posterior(self, value):
